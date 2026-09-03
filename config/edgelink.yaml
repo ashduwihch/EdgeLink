@@ -1,0 +1,9 @@
+app:
+  name: EdgeLink
+  worker_threads: 4
+
+logging:
+  level: INFO
+
+runtime:
+  shutdown_timeout_ms: 3000
