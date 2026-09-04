@@ -1,8 +1,10 @@
 #include "edgelink/config.h"
 #include "edgelink/logger.h"
+#include "edgelink/signal_handler.h"
 #include "edgelink/thread_pool.h"
-#include <string>
+
 #include <chrono>
+#include <string>
 #include <thread>
 
 int main()
@@ -41,26 +43,27 @@ int main()
     edgelink::Logger::info("Worker threads: " + std::to_string(workerThreads));
     edgelink::Logger::info("Shutdown timeout: " + std::to_string(shutdownTimeout) + " ms");
 
-    //测试线程池
+    // 注册退出信号
+    edgelink::registerSignalHandlers();
+
+    // 启动线程池
     edgelink::ThreadPool pool(workerThreads);
     pool.start();
-    // 提交 6 个测试任务
-    for (int i = 1; i <= 6; ++i)
+
+    edgelink::Logger::info("EdgeLink started");
+
+    // 主循环持续运行，直到收到退出请求
+    while (!edgelink::shutdownRequested())
     {
-        pool.submit([i]()
-        {
-            edgelink::Logger::info("Task " + std::to_string(i) + " started");
-
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            edgelink::Logger::info("Task " + std::to_string(i) + " finished");
-        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
-    // 等待任务执行完成并停止线程池
+    // 收到退出信号后安全停止
+    edgelink::Logger::info("Shutdown requested");
+
     pool.stop();
 
-    edgelink::Logger::info("ThreadPool stopped");
+    edgelink::Logger::info("EdgeLink stopped");
 
     return 0;
 }
