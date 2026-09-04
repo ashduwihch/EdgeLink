@@ -14,13 +14,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 #让CMake找到这个第三方库
 find_package(yaml-cpp REQUIRED)
+find_package(Threads REQUIRED)
 
 #创建一个可执行程序：程序名 用哪个源文件来编译（以后可以继续添加） 
 add_executable(edgelinkd
     src/main.cpp
     src/logger.cpp
     src/config.cpp
-)
+    src/thread_pool.cpp
+    )
 #用于找到logger.h
 target_include_directories(edgelinkd
     PRIVATE
@@ -30,6 +32,7 @@ target_include_directories(edgelinkd
 target_link_libraries(edgelinkd
     PRIVATE
     yaml-cpp
+    Threads::Threads
 )
 
 #g++和gcc即：把源代码翻译成电脑能运行程序的编译器，gcc编译C，g++编译C++
