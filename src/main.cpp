@@ -1,7 +1,9 @@
 #include "edgelink/config.h"
 #include "edgelink/logger.h"
-
+#include "edgelink/thread_pool.h"
 #include <string>
+#include <chrono>
+#include <thread>
 
 int main()
 {
@@ -38,6 +40,27 @@ int main()
     edgelink::Logger::info("App name: " + appName);
     edgelink::Logger::info("Worker threads: " + std::to_string(workerThreads));
     edgelink::Logger::info("Shutdown timeout: " + std::to_string(shutdownTimeout) + " ms");
+
+    //测试线程池
+    edgelink::ThreadPool pool(workerThreads);
+    pool.start();
+    // 提交 6 个测试任务
+    for (int i = 1; i <= 6; ++i)
+    {
+        pool.submit([i]()
+        {
+            edgelink::Logger::info("Task " + std::to_string(i) + " started");
+
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            edgelink::Logger::info("Task " + std::to_string(i) + " finished");
+        });
+    }
+
+    // 等待任务执行完成并停止线程池
+    pool.stop();
+
+    edgelink::Logger::info("ThreadPool stopped");
 
     return 0;
 }
