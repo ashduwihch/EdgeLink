@@ -1,110 +1,115 @@
 #include "edgelink/event_loop.h"
+#include "edgelink/channel.h"
 #include "edgelink/logger.h"
 
-#include <cerrno> // errno / EINTR，判断系统调用错误
-#include <stdexcept>//runtime_error 异常
-#include <sys/epoll.h>//epoll 核心 API
-#include <unistd.h>//close() 等 Linux 系统调用
+#include <cerrno>
+#include <stdexcept>
+#include <sys/epoll.h>
+#include <unistd.h>
 
 namespace edgelink
 {
 
-    // 构造函数，创建 epoll 实例，当EventLoop loop;时自动执行
-    EventLoop::EventLoop()
-    {
-        epollFd_ = epoll_create1(0);//现有函数创建一个 epoll 实例，会返回一个值，-1表示失败
+// 创建 epoll 实例
+EventLoop::EventLoop()
+{
+    epollFd_ = epoll_create1(0);
 
-        if (epollFd_ < 0)
-        {
-            throw std::runtime_error("Failed to create epoll");
-        }
+    if (epollFd_ < 0)
+    {
+        throw std::runtime_error("Failed to create epoll");
+    }
+}
+
+// 释放 epoll 实例
+EventLoop::~EventLoop()
+{
+    stop();
+
+    if (epollFd_ >= 0)
+    {
+        close(epollFd_);
+    }
+}
+
+// 将 Channel 注册到 epoll
+bool EventLoop::addChannel(Channel* channel)
+{
+    int fd = channel->fd();
+
+    epoll_event event{};
+    event.events = channel->events();
+    event.data.fd = fd;
+
+    if (epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event) < 0)
+    {
+        Logger::error("Failed to add channel to epoll: " + std::to_string(fd));
+        return false;
     }
 
-    // 释放 epoll 实例，析构函数
-    EventLoop::~EventLoop()
-    {
-        stop();
+    channels_[fd] = channel;
+    return true;
+}
 
-        if (epollFd_ >= 0)
-        {
-            close(epollFd_);
-        }
+// 从 epoll 中移除 Channel
+bool EventLoop::removeChannel(Channel* channel)
+{
+    int fd = channel->fd();
+
+    if (epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) < 0)
+    {
+        Logger::error("Failed to remove channel from epoll: " + std::to_string(fd));
+        return false;
     }
 
-    // 注册一个 fd 及其事件处理函数
-    bool EventLoop::addFd(int fd, std::uint32_t events, EventCallback callback)
+    channels_.erase(fd);
+    return true;
+}
+
+// 启动事件循环并分发事件
+void EventLoop::run()
+{
+    constexpr int maxEvents = 32;
+    epoll_event events[maxEvents]{};
+
+    running_ = true;
+
+    while (running_)
     {
-        epoll_event event{}; //事件结构体，描述“监听哪个 fd、监听什么事件”的结构体
-        event.events = events;
-        event.data.fd = fd;
+        int eventCount = epoll_wait(epollFd_, events, maxEvents, 200);
 
-        if (epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event) < 0)
+        if (eventCount < 0)
         {
-            Logger::error("Failed to add fd to epoll: " + std::to_string(fd));
-            return false;
-        }
-
-        callbacks_[fd] = std::move(callback);
-        return true;
-    }
-
-    // 从 epoll 中移除指定 fd
-    bool EventLoop::removeFd(int fd)
-    {
-        if (epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr) < 0)
-        {
-            Logger::error("Failed to remove fd from epoll: " + std::to_string(fd));
-            return false;
-        }
-
-        callbacks_.erase(fd);
-        return true;
-    }
-
-    // 启动事件循环并分发 fd 事件
-    void EventLoop::run()
-    {
-        constexpr int maxEvents = 32;
-        epoll_event events[maxEvents]{};
-
-        running_ = true;
-
-        while (running_)
-        {
-            int eventCount = epoll_wait(epollFd_, events, maxEvents, 200);
-
-            if (eventCount < 0)
+            if (errno == EINTR)
             {
-                if (errno == EINTR)
-                {
-                    continue;
-                }
-
-                Logger::error("epoll_wait failed");
-                break;
+                continue;
             }
 
-            for (int i = 0; i < eventCount; ++i)
-            {
-                int fd = events[i].data.fd;
-                std::uint32_t eventType = events[i].events;
-
-                auto callback = callbacks_.find(fd);
-
-                if (callback != callbacks_.end())//没找到，find() 会返回callbacks_.end()
-                {
-                    callback->second(eventType);
-                }
-            }
+            Logger::error("epoll_wait failed");
+            break;
         }
 
-        running_ = false;
+        for (int i = 0; i < eventCount; ++i)
+        {
+            int fd = events[i].data.fd;
+
+            auto channel = channels_.find(fd);
+
+            if (channel != channels_.end())
+            {
+                channel->second->setRevents(events[i].events);
+                channel->second->handleEvent();
+            }
+        }
     }
 
-    // 停止事件循环
-    void EventLoop::stop()
-    {
-        running_ = false;
-    }
+    running_ = false;
+}
+
+// 停止事件循环
+void EventLoop::stop()
+{
+    running_ = false;
+}
 
 }  // namespace edgelink
