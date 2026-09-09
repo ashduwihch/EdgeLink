@@ -25,7 +25,8 @@ add_executable(edgelinkd
     src/signal_handler.cpp
     src//event_loop.cpp
     src/channel.cpp
-    )
+    src/timer.cpp
+   )
 #用于找到logger.h
 target_include_directories(edgelinkd
     PRIVATE
