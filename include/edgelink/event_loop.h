@@ -1,24 +1,27 @@
 #pragma once
 
-#include <cstdint>  //提供固定长度整数类型,例如std::uint32_t
-#include <functional>//提供：std::function<void()>，专门用来保存“一个函数”的变量
-#include <unordered_map>//哈希表，用key快速找到对于value，保存 fd 和处理函数的对应关系
+#include <atomic>
+#include <unordered_map>
 
-namespace edgelink{
-    class EventLoop{
-        public:
-        using EventCallback = std::function<void(std::uint32_t)>;//起别名
+namespace edgelink
+{
+    //称为前向声明，先告诉编译器，有一个类叫 Channel
+    class Channel;
+
+    class EventLoop
+    {
+    public:
         // 创建 epoll 实例
         EventLoop();
 
         // 释放 epoll 资源
         ~EventLoop();
 
-        // 注册需要监听的 fd
-        bool addFd(int fd, std::uint32_t events, EventCallback callback);
+        // 将 Channel 注册到 epoll
+        bool addChannel(Channel* channel);
 
-        // 移除已经注册的 fd
-        bool removeFd(int fd);
+        // 从 epoll 中移除 Channel
+        bool removeChannel(Channel* channel);
 
         // 启动事件循环
         void run();
@@ -26,10 +29,13 @@ namespace edgelink{
         // 停止事件循环
         void stop();
 
-        private:
-            int epollFd_ = -1;
-            bool running_ = false;
-            //建一个表，key 是 int 类型的 fd，value 是这个 fd 对应的处理函数
-            std::unordered_map<int, EventCallback> callbacks_;
+    private:
+        int epollFd_ = -1;
+        //为什么要用原子布尔变量？
+        //普通 bool：只有同一个线程读写它。原子：这个变量允许多个线程安全地读和写
+        std::atomic<bool> running_{false};   
+
+        std::unordered_map<int, Channel*> channels_;
     };
-}
+
+}  // namespace edgelink
