@@ -27,6 +27,7 @@ add_executable(edgelinkd
     src/channel.cpp
     src/timer.cpp
     src/wakeup.cpp
+    src/tcp_server.cpp
    )
 #用于找到logger.h
 target_include_directories(edgelinkd

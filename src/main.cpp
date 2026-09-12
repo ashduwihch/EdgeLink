@@ -1,69 +1,40 @@
-#include "edgelink/config.h"
+#include "edgelink/event_loop.h"
 #include "edgelink/logger.h"
 #include "edgelink/signal_handler.h"
-#include "edgelink/thread_pool.h"
-
-#include <chrono>
-#include <string>
-#include <thread>
+#include "edgelink/tcp_server.h"
+#include "edgelink/timer.h"
 
 int main()
 {
-    edgelink::Config config;
+    edgelink::registerSignalHandlers();
 
-    // 加载配置文件
-    if (!config.load("../config/edgelink.yaml"))
+    edgelink::EventLoop eventLoop;
+    edgelink::TcpServer server(&eventLoop, 9000);
+
+    if (!server.start())
     {
+        edgelink::Logger::error("Failed to start TCP server");
         return 1;
     }
 
-    // 设置日志等级
-    std::string logLevel = config.getString("logging.level", "INFO");
+    // 周期检查退出信号
+    edgelink::Timer signalTimer(&eventLoop);
 
-    if (logLevel == "WARN")
+    signalTimer.startPeriodic(200, [&eventLoop]()
     {
-        edgelink::Logger::setLevel(edgelink::LogLevel::Warn);
-    }
-    else if (logLevel == "ERROR")
-    {
-        edgelink::Logger::setLevel(edgelink::LogLevel::Error);
-    }
-    else
-    {
-        edgelink::Logger::setLevel(edgelink::LogLevel::Info);
-    }
+        if (edgelink::shutdownRequested())
+        {
+            eventLoop.stop();
+        }
+    });
 
-    // 读取程序配置
-    std::string appName = config.getString("app.name", "EdgeLink");
-    int workerThreads = config.getInt("app.worker_threads", 4);
-    int shutdownTimeout = config.getInt("runtime.shutdown_timeout_ms", 3000);
+    edgelink::Logger::info("EdgeLink TCP server is running");
 
-    // 输出启动信息
-    edgelink::Logger::info("App name: " + appName);
-    edgelink::Logger::info("Worker threads: " + std::to_string(workerThreads));
-    edgelink::Logger::info("Shutdown timeout: " + std::to_string(shutdownTimeout) + " ms");
+    eventLoop.run();
 
-    // 注册退出信号
-    edgelink::registerSignalHandlers();
+    server.stop();
 
-    // 启动线程池
-    edgelink::ThreadPool pool(workerThreads);
-    pool.start();
-
-    edgelink::Logger::info("EdgeLink started");
-
-    // 主循环持续运行，直到收到退出请求
-    while (!edgelink::shutdownRequested())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    }
-
-    // 收到退出信号后安全停止
-    edgelink::Logger::info("Shutdown requested");
-
-    pool.stop();
-
-    edgelink::Logger::info("EdgeLink stopped");
+    edgelink::Logger::info("EdgeLink TCP server stopped");
 
     return 0;
 }

@@ -44,29 +44,39 @@ namespace edgelink
     }
 
     // 根据实际发生的事件调用对应回调
+    // 根据实际发生的事件调用对应回调
     void Channel::handleEvent()
     {
-        if ((revents_ & EPOLLERR) || (revents_ & EPOLLHUP))  //epoll返回的事件中有无错误或者连接挂断事件
+        std::uint32_t revents = revents_;
+        EventCallback readCallback = readCallback_;
+        EventCallback writeCallback = writeCallback_;
+        EventCallback errorCallback = errorCallback_;
+
+        if (revents & (EPOLLERR | EPOLLHUP))
         {
-            if (errorCallback_)
+            if (errorCallback)
             {
-                errorCallback_();
+                errorCallback();
             }
+
+            return;
         }
 
-        if (revents_ & EPOLLIN)  //有无可读事件
+        if (revents & (EPOLLIN | EPOLLRDHUP))
         {
-            if (readCallback_)
+            if (readCallback)
             {
-                readCallback_();
+                readCallback();
             }
+
+            return;
         }
 
-        if (revents_ & EPOLLOUT)  //可写事件
+        if (revents & EPOLLOUT)
         {
-            if (writeCallback_)
+            if (writeCallback)
             {
-                writeCallback_();
+                writeCallback();
             }
         }
     }
