@@ -10,13 +10,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 尽量使用标准C++17，不依赖GCC私有语法扩展
 set(CMAKE_CXX_EXTENSIONS OFF)
-# 查找第三方库,REQUIRED表示找不到就直接让 CMake 配置失败
+# 查找第三方库，REQUIRED表示找不到就直接让CMake配置失败
 find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
 
 # 创建EdgeLink核心库：放项目中的公共功能模块
-
-add_library(edgelink  #这里edgelink是CMake 里的一个 target（构建目标）
+add_library(edgelink
     src/logger.cpp
     src/config.cpp
     src/thread_pool.cpp
@@ -26,7 +25,11 @@ add_library(edgelink  #这里edgelink是CMake 里的一个 target（构建目标
     src/timer.cpp
     src/wakeup.cpp
     src/tcp_server.cpp
+    src/plugin_manager.cpp
 )
+
+# 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
+set_target_properties(edgelink PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # 告诉CMake去哪里找项目自己的头文件
 target_include_directories(edgelink
@@ -39,15 +42,32 @@ target_link_libraries(edgelink
     PUBLIC
     yaml-cpp
     Threads::Threads
+    ${CMAKE_DL_LIBS}   #链接linux动态加载库
 )
 
-# 创建一个叫 edgelinkd 的可执行程序
+# 创建一个叫edgelinkd的可执行程序
 add_executable(edgelinkd
     src/main.cpp
 )
 
 # 让主程序使用EdgeLink核心库
 target_link_libraries(edgelinkd
+    PRIVATE
+    edgelink
+)
+
+# 创建Mock插件动态库
+add_library(mock_plugin SHARED  #构建动态共享库
+    plugins/mock_plugin/mock_plugin.cpp
+)
+
+target_include_directories(mock_plugin
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/plugins/mock_plugin
+)
+
+target_link_libraries(mock_plugin
     PRIVATE
     edgelink
 )
@@ -66,7 +86,7 @@ target_link_libraries(test_event_loop
     edgelink
 )
 
-# 把 test_timer.cpp 编译成一个叫 test_timer 的普通可执行程序
+# 把test_timer.cpp编译成一个叫test_timer的普通可执行程序
 add_executable(test_timer
     tests/test_timer.cpp
 )
@@ -99,7 +119,37 @@ target_link_libraries(test_tcp_server
     edgelink
 )
 
+# 创建直接调用Mock插件接口的测试程序
+add_executable(test_plugin
+    tests/test_plugin.cpp
+)
+
+target_include_directories(test_plugin
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_plugin
+    PRIVATE
+    mock_plugin
+)
+
+# 创建PluginManager动态加载测试程序
+add_executable(test_plugin_manager
+    tests/test_plugin_manager.cpp
+)
+
+target_link_libraries(test_plugin_manager
+    PRIVATE
+    edgelink
+)
+
+# 保证运行PluginManager测试前Mock插件已经生成
+add_dependencies(test_plugin_manager mock_plugin)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
 add_test(NAME WakeupTest COMMAND test_wakeup)
+add_test(NAME PluginTest COMMAND test_plugin)
+add_test(NAME PluginManagerTest COMMAND test_plugin_manager $<TARGET_FILE:mock_plugin>)
