@@ -26,6 +26,7 @@ add_library(edgelink
     src/wakeup.cpp
     src/tcp_server.cpp
     src/plugin_manager.cpp
+    src/device_manager.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -147,9 +148,31 @@ target_link_libraries(test_plugin_manager
 # 保证运行PluginManager测试前Mock插件已经生成
 add_dependencies(test_plugin_manager mock_plugin)
 
+# 创建Device/Tag数据模型测试程序
+add_executable(test_device_model
+    tests/test_device_model.cpp
+)
+
+target_link_libraries(test_device_model
+    PRIVATE
+    edgelink
+)
+
+# 创建设备管理测试程序
+add_executable(test_device_manager
+    tests/test_device_manager.cpp
+)
+
+target_link_libraries(test_device_manager
+    PRIVATE
+    edgelink
+)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
 add_test(NAME WakeupTest COMMAND test_wakeup)
 add_test(NAME PluginTest COMMAND test_plugin)
 add_test(NAME PluginManagerTest COMMAND test_plugin_manager $<TARGET_FILE:mock_plugin>)
+add_test(NAME DeviceModelTest COMMAND test_device_model)
+add_test(NAME DeviceManagerTest COMMAND test_device_manager)
