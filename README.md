@@ -553,15 +553,19 @@ kill -9 edgelinkd
 
 ## Roadmap
 
-- [ ] Core project infrastructure
-- [ ] ThreadPool & basic runtime
-- [ ] `epoll` EventLoop
-- [ ] `timerfd` / `eventfd`
-- [ ] Plugin Manager
-- [ ] Unified Device Model
+- [x] Core project infrastructure
+- [x] ThreadPool & basic runtime
+- [x] `epoll` EventLoop
+- [x] `timerfd` / `eventfd`
+- [x] Non-blocking TCP Server
+- [x] Plugin Manager
+- [x] Unified Device Model
+- [x] Device Manager
+- [x] Modbus TCP single-device prototype
 - [ ] Message Bus
 - [ ] IPC
-- [ ] Modbus RTU / TCP
+- [ ] Modbus RTU
+- [ ] Configurable multi-device Modbus TCP
 - [ ] SocketCAN
 - [ ] Device Scheduler
 - [ ] Connection State Machine
@@ -581,17 +585,29 @@ kill -9 edgelinkd
 
 EdgeLink is currently under active development.
 
-Current stage:
+Current version:
 
-**Project Initialization**
+**v0.3.0 — Plugin Runtime**
 
 Completed:
 
-- [x] Project definition
-- [x] System architecture
-- [x] Technical roadmap
-- [x] GitHub repository
-- [x] Development environment planning
+- [x] C++17 / CMake project infrastructure
+- [x] Config and thread-safe Logger
+- [x] ThreadPool and graceful shutdown
+- [x] `epoll` EventLoop and Channel abstraction
+- [x] `timerfd` Timer and `eventfd` Wakeup
+- [x] Non-blocking TCP Server
+- [x] Dynamic Plugin interface and PluginManager
+- [x] Mock Plugin lifecycle verification
+- [x] Unified Device / Tag / Quality model
+- [x] DeviceManager
+- [x] First Modbus TCP Plugin
+- [x] Modbus register to TagValue conversion
+- [x] Automated CTest regression suite
+
+Next milestone:
+
+**v0.4.0 — Messaging & IPC**
 
 ---
 

@@ -3,7 +3,7 @@
 # 最低CMake版本要求
 cmake_minimum_required(VERSION 3.16)
 # 定义工程：项目名 版本号 CXX即使用C++
-project(EdgeLink VERSION 0.2.0 LANGUAGES CXX)
+project(EdgeLink VERSION 0.3.0 LANGUAGES CXX)
 # 项目统一使用C++17
 set(CMAKE_CXX_STANDARD 17)
 # 必须使用指定的C++17
