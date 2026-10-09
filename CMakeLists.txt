@@ -32,6 +32,7 @@ add_library(edgelink
     src/message_bus.cpp
     src/unix_domain_server.cpp
     src/control_command_processor.cpp
+    src/shared_memory_buffer.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -49,6 +50,7 @@ target_link_libraries(edgelink
     yaml-cpp
     Threads::Threads
     ${CMAKE_DL_LIBS}   #链接linux动态加载库
+    rt                  #POSIX Shared Memory接口
 )
 
 # 创建一个叫edgelinkd的可执行程序
@@ -252,6 +254,16 @@ target_link_libraries(test_control_command_processor
     edgelink
 )
 
+# 创建Shared Memory与mmap跨进程数据测试程序
+add_executable(test_shared_memory_buffer
+    tests/test_shared_memory_buffer.cpp
+)
+
+target_link_libraries(test_shared_memory_buffer
+    PRIVATE
+    edgelink
+)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
@@ -266,3 +278,4 @@ add_test(NAME MessageBusTest COMMAND test_message_bus)
 add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
 add_test(NAME ControlCommandProcessorTest COMMAND test_control_command_processor)
+add_test(NAME SharedMemoryBufferTest COMMAND test_shared_memory_buffer)
