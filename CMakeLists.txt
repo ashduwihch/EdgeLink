@@ -13,6 +13,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # 查找第三方库，REQUIRED表示找不到就直接让CMake配置失败
 find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBMODBUS REQUIRED IMPORTED_TARGET libmodbus)
 
 # 创建EdgeLink核心库：放项目中的公共功能模块
 add_library(edgelink
@@ -71,6 +73,23 @@ target_include_directories(mock_plugin
 target_link_libraries(mock_plugin
     PRIVATE
     edgelink
+)
+
+# 创建第一版Modbus TCP插件动态库
+add_library(modbus_plugin SHARED
+    plugins/modbus_plugin/modbus_plugin.cpp
+)
+
+target_include_directories(modbus_plugin
+    PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/plugins/modbus_plugin
+)
+
+target_link_libraries(modbus_plugin
+    PUBLIC
+    edgelink
+    PkgConfig::LIBMODBUS
 )
 
 # 开启CMake测试功能
@@ -168,6 +187,28 @@ target_link_libraries(test_device_manager
     edgelink
 )
 
+# 创建Modbus TCP插件读寄存器测试程序
+add_executable(test_modbus_plugin
+    tests/test_modbus_plugin.cpp
+)
+
+target_link_libraries(test_modbus_plugin
+    PRIVATE
+    modbus_plugin
+)
+
+# 验证PluginManager可以动态加载Modbus插件
+add_executable(test_modbus_plugin_load
+    tests/test_modbus_plugin_load.cpp
+)
+
+target_link_libraries(test_modbus_plugin_load
+    PRIVATE
+    edgelink
+)
+
+add_dependencies(test_modbus_plugin_load modbus_plugin)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
@@ -176,3 +217,5 @@ add_test(NAME PluginTest COMMAND test_plugin)
 add_test(NAME PluginManagerTest COMMAND test_plugin_manager $<TARGET_FILE:mock_plugin>)
 add_test(NAME DeviceModelTest COMMAND test_device_model)
 add_test(NAME DeviceManagerTest COMMAND test_device_manager)
+add_test(NAME ModbusPluginTest COMMAND test_modbus_plugin)
+add_test(NAME ModbusPluginLoadTest COMMAND test_modbus_plugin_load $<TARGET_FILE:modbus_plugin>)
