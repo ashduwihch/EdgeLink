@@ -29,6 +29,9 @@ add_library(edgelink
     src/tcp_server.cpp
     src/plugin_manager.cpp
     src/device_manager.cpp
+    src/message_bus.cpp
+    src/unix_domain_server.cpp
+    src/control_command_processor.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -209,6 +212,46 @@ target_link_libraries(test_modbus_plugin_load
 
 add_dependencies(test_modbus_plugin_load modbus_plugin)
 
+# 创建进程内MessageBus测试程序
+add_executable(test_message_bus
+    tests/test_message_bus.cpp
+)
+
+target_link_libraries(test_message_bus
+    PRIVATE
+    edgelink
+)
+
+# 创建MessageBus并发发布测试程序
+add_executable(test_message_bus_concurrent
+    tests/test_message_bus_concurrent.cpp
+)
+
+target_link_libraries(test_message_bus_concurrent
+    PRIVATE
+    edgelink
+)
+
+# 创建Unix Domain Socket本地进程通信测试程序
+add_executable(test_unix_domain_server
+    tests/test_unix_domain_server.cpp
+)
+
+target_link_libraries(test_unix_domain_server
+    PRIVATE
+    edgelink
+)
+
+# 创建本地控制命令解析测试程序
+add_executable(test_control_command_processor
+    tests/test_control_command_processor.cpp
+)
+
+target_link_libraries(test_control_command_processor
+    PRIVATE
+    edgelink
+)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
@@ -219,3 +262,7 @@ add_test(NAME DeviceModelTest COMMAND test_device_model)
 add_test(NAME DeviceManagerTest COMMAND test_device_manager)
 add_test(NAME ModbusPluginTest COMMAND test_modbus_plugin)
 add_test(NAME ModbusPluginLoadTest COMMAND test_modbus_plugin_load $<TARGET_FILE:modbus_plugin>)
+add_test(NAME MessageBusTest COMMAND test_message_bus)
+add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
+add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
+add_test(NAME ControlCommandProcessorTest COMMAND test_control_command_processor)
