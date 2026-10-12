@@ -29,6 +29,7 @@ add_library(edgelink
     src/tcp_server.cpp
     src/plugin_manager.cpp
     src/device_manager.cpp
+    src/device_scheduler.cpp
     src/message_bus.cpp
     src/unix_domain_server.cpp
     src/control_command_processor.cpp
@@ -96,6 +97,7 @@ target_link_libraries(mock_plugin
 # 创建第一版Modbus TCP插件动态库
 add_library(modbus_plugin SHARED
     plugins/modbus_plugin/modbus_plugin.cpp
+    plugins/modbus_plugin/modbus_rtu_transport.cpp
 )
 
 target_include_directories(modbus_plugin
@@ -205,6 +207,16 @@ target_link_libraries(test_device_manager
     edgelink
 )
 
+# 创建设备多周期轮询调度器测试程序
+add_executable(test_device_scheduler
+    tests/test_device_scheduler.cpp
+)
+
+target_link_libraries(test_device_scheduler
+    PRIVATE
+    edgelink
+)
+
 # 创建Modbus TCP插件读寄存器测试程序
 add_executable(test_modbus_plugin
     tests/test_modbus_plugin.cpp
@@ -226,6 +238,17 @@ target_link_libraries(test_modbus_plugin_load
 )
 
 add_dependencies(test_modbus_plugin_load modbus_plugin)
+
+# 使用Linux伪终端验证Modbus RTU串口传输
+add_executable(test_modbus_rtu_transport
+    tests/test_modbus_rtu_transport.cpp
+)
+
+target_link_libraries(test_modbus_rtu_transport
+    PRIVATE
+    modbus_plugin
+    util
+)
 
 # 创建进程内MessageBus测试程序
 add_executable(test_message_bus
@@ -305,8 +328,10 @@ add_test(NAME PluginTest COMMAND test_plugin)
 add_test(NAME PluginManagerTest COMMAND test_plugin_manager $<TARGET_FILE:mock_plugin>)
 add_test(NAME DeviceModelTest COMMAND test_device_model)
 add_test(NAME DeviceManagerTest COMMAND test_device_manager)
+add_test(NAME DeviceSchedulerTest COMMAND test_device_scheduler)
 add_test(NAME ModbusPluginTest COMMAND test_modbus_plugin)
 add_test(NAME ModbusPluginLoadTest COMMAND test_modbus_plugin_load $<TARGET_FILE:modbus_plugin>)
+add_test(NAME ModbusRtuTransportTest COMMAND test_modbus_rtu_transport)
 add_test(NAME MessageBusTest COMMAND test_message_bus)
 add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
