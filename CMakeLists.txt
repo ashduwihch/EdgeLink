@@ -3,7 +3,7 @@
 # 最低CMake版本要求
 cmake_minimum_required(VERSION 3.16)
 # 定义工程：项目名 版本号 CXX即使用C++
-project(EdgeLink VERSION 0.3.0 LANGUAGES CXX)
+project(EdgeLink VERSION 0.4.0 LANGUAGES CXX)
 # 项目统一使用C++17
 set(CMAKE_CXX_STANDARD 17)
 # 必须使用指定的C++17
@@ -33,6 +33,9 @@ add_library(edgelink
     src/unix_domain_server.cpp
     src/control_command_processor.cpp
     src/shared_memory_buffer.cpp
+    src/eventfd_notifier.cpp
+    src/ipc_message_codec.cpp
+    src/shared_memory_message_bridge.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -60,6 +63,16 @@ add_executable(edgelinkd
 
 # 让主程序使用EdgeLink核心库
 target_link_libraries(edgelinkd
+    PRIVATE
+    edgelink
+)
+
+# 创建Messaging与IPC性能测试程序（不注册到CTest，避免把性能波动当成功能失败）
+add_executable(benchmark_messaging_ipc
+    benchmarks/benchmark_messaging_ipc.cpp
+)
+
+target_link_libraries(benchmark_messaging_ipc
     PRIVATE
     edgelink
 )
@@ -264,6 +277,26 @@ target_link_libraries(test_shared_memory_buffer
     edgelink
 )
 
+# 创建Shared Memory与eventfd事件通知测试程序
+add_executable(test_shared_memory_eventfd
+    tests/test_shared_memory_eventfd.cpp
+)
+
+target_link_libraries(test_shared_memory_eventfd
+    PRIVATE
+    edgelink
+)
+
+# 创建IPC与MessageBus完整链路测试程序
+add_executable(test_ipc_message_bridge
+    tests/test_ipc_message_bridge.cpp
+)
+
+target_link_libraries(test_ipc_message_bridge
+    PRIVATE
+    edgelink
+)
+
 # 把自动测试程序注册给CTest
 add_test(NAME EventLoopTest COMMAND test_event_loop)
 add_test(NAME TimerTest COMMAND test_timer)
@@ -279,3 +312,5 @@ add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
 add_test(NAME ControlCommandProcessorTest COMMAND test_control_command_processor)
 add_test(NAME SharedMemoryBufferTest COMMAND test_shared_memory_buffer)
+add_test(NAME SharedMemoryEventFdTest COMMAND test_shared_memory_eventfd)
+add_test(NAME IpcMessageBridgeTest COMMAND test_ipc_message_bridge)

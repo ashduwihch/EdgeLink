@@ -177,14 +177,41 @@ EdgeLink 使用 Publish / Subscribe 模型解耦内部模块。
            MQTT        Storage      Monitor
 ```
 
-后续支持跨进程通信：
+当前跨进程通信骨架包括：
 
 - Unix Domain Socket
 - Shared Memory
 - `mmap`
 - `eventfd`
+- IPC Message Codec
+- Shared Memory → Message Bus Bridge
 
 为 Camera、AI、Device Service 等独立服务提供低耦合通信机制。
+
+控制命令通过 Unix Domain Socket 传递；大块数据保存在共享内存中，
+`eventfd` 负责事件通知。IPC Bridge 将跨进程数据还原为统一 `Message`，
+再交给进程内 MessageBus 分发。
+
+#### Messaging & IPC Benchmark
+
+在 Ubuntu 虚拟机、GCC 9.4、CMake `Release` 构建下的初步参考结果：
+
+| Benchmark | Iterations | Throughput | Average | P50 | P95 | P99 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MessageBus publish | 100,000 | 14.0 M msg/s | 0.045 us | 0.040 us | 0.060 us | 0.071 us |
+| Shared memory IPC bridge | 5,000 | 13.1 K msg/s | 39.641 us | 37.340 us | 107.137 us | 172.398 us |
+
+测试命令：
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release -j --target benchmark_messaging_ipc
+./build-release/benchmark_messaging_ipc
+```
+
+MessageBus 项目为单线程、单订阅者同步发布。IPC 项目使用单槽位共享内存，
+每发送一条消息等待接收确认，统计范围包含消息编码、`msync`、`eventfd`、
+`epoll`、消息解码以及 MessageBus 分发。虚拟机调度和系统负载会影响结果。
 
 ---
 
@@ -562,8 +589,8 @@ kill -9 edgelinkd
 - [x] Unified Device Model
 - [x] Device Manager
 - [x] Modbus TCP single-device prototype
-- [ ] Message Bus
-- [ ] IPC
+- [x] Message Bus
+- [x] IPC
 - [ ] Modbus RTU
 - [ ] Configurable multi-device Modbus TCP
 - [ ] SocketCAN
@@ -587,7 +614,7 @@ EdgeLink is currently under active development.
 
 Current version:
 
-**v0.3.0 — Plugin Runtime**
+**v0.4.0 — Messaging & IPC**
 
 Completed:
 
@@ -603,11 +630,17 @@ Completed:
 - [x] DeviceManager
 - [x] First Modbus TCP Plugin
 - [x] Modbus register to TagValue conversion
+- [x] Thread-safe in-process MessageBus
+- [x] Unix Domain Socket control channel
+- [x] Shared Memory / mmap data channel
+- [x] eventfd notification integrated with EventLoop
+- [x] IPC Message codec and MessageBus bridge
+- [x] Messaging / IPC throughput and latency benchmark
 - [x] Automated CTest regression suite
 
 Next milestone:
 
-**v0.4.0 — Messaging & IPC**
+**v0.5.0 — Industrial Device Connectivity**
 
 ---
 
