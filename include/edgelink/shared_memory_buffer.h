@@ -11,8 +11,8 @@ namespace edgelink
 /**
  * @brief 使用 POSIX Shared Memory 和 mmap 实现的跨进程字节缓冲区。
  *
- * 创建者负责确定容量，其他进程通过相同名称打开共享内存。当前版本只负责
- * 数据共享，读写双方的事件通知将在后续通过 eventfd 完成。
+ * 创建者负责确定容量，其他进程通过相同名称打开共享内存。该类只负责
+ * 数据共享，可与 EventFdNotifier 组合实现无忙轮询的事件通知。
  */
 class SharedMemoryBuffer
 {
