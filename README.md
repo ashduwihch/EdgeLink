@@ -591,11 +591,11 @@ kill -9 edgelinkd
 - [x] Modbus TCP single-device prototype
 - [x] Message Bus
 - [x] IPC
-- [ ] Modbus RTU
-- [ ] Configurable multi-device Modbus TCP
-- [ ] SocketCAN
-- [ ] Device Scheduler
-- [ ] Connection State Machine
+- [x] Modbus RTU transport
+- [x] Configurable multi-Tag Modbus TCP
+- [x] SocketCAN
+- [x] Device Scheduler
+- [x] Connection State Machine
 - [ ] MQTT Service
 - [ ] SQLite persistence
 - [ ] Store-and-Forward
@@ -614,7 +614,7 @@ EdgeLink is currently under active development.
 
 Current version:
 
-**v0.4.0 — Messaging & IPC**
+**v0.5.0 — Industrial Device Connectivity**
 
 Completed:
 
@@ -637,10 +637,17 @@ Completed:
 - [x] IPC Message codec and MessageBus bridge
 - [x] Messaging / IPC throughput and latency benchmark
 - [x] Automated CTest regression suite
+- [x] Configurable Modbus TCP multi-Tag polling
+- [x] Modbus RTU serial transport
+- [x] Multi-period DeviceScheduler
+- [x] SocketCAN Plugin and vcan frame transmission
+- [x] Device connection state machine and communication timeout
+- [x] Exponential-backoff reconnect and Tag Quality updates
+- [x] 20-device polling and fault-isolation integration test
 
 Next milestone:
 
-**v0.5.0 — Industrial Device Connectivity**
+**v0.6.0 — Reliable Data Pipeline**
 
 ---
 

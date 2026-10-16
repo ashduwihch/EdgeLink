@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -124,37 +125,50 @@ int main()
         return 1;
     }
 
-    constexpr int expectedRequests = 5;
+    constexpr int requestsPerSession = 5;
+    constexpr int expectedRequests = requestsPerSession * 2;
     std::atomic<int> repliedRequests{0};
+    std::atomic<bool> firstSessionFinished{false};
 
-    // 模拟设备在独立线程中接收并回复每个Tag的读取请求。
+    // 模拟设备先断开第一条连接，再接受插件自动重连。
     std::thread server([&]()
     {
-        if (modbus_tcp_accept(serverContext, &serverSocket) < 0)
+        for (int session = 0; session < 2; ++session)
         {
-            return;
-        }
-
-        for (int index = 0; index < expectedRequests; ++index)
-        {
-            std::uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH]{};
-            int queryLength = modbus_receive(serverContext, query);
-
-            if (queryLength <= 0 ||
-                modbus_reply(serverContext, query, queryLength, mapping) < 0)
+            if (modbus_tcp_accept(serverContext, &serverSocket) < 0)
             {
-                break;
+                return;
             }
 
-            ++repliedRequests;
-        }
+            for (int index = 0; index < requestsPerSession; ++index)
+            {
+                std::uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH]{};
+                int queryLength = modbus_receive(serverContext, query);
 
-        modbus_close(serverContext);
+                if (queryLength <= 0 ||
+                    modbus_reply(serverContext, query, queryLength, mapping) < 0)
+                {
+                    return;
+                }
+
+                ++repliedRequests;
+            }
+
+            modbus_close(serverContext);
+
+            if (session == 0)
+            {
+                firstSessionFinished = true;
+            }
+        }
     });
 
     edgelink::DeviceManager deviceManager;
     edgelink::ModbusTcpConfig config;
     config.port = port;
+    config.communicationTimeoutMs = 1;
+    config.reconnectInitialDelayMs = 50;
+    config.reconnectMaximumDelayMs = 200;
     config.deviceId = "process-device-01";
     config.deviceName = "Process Device";
     config.tags = {
@@ -167,15 +181,54 @@ int main()
 
     edgelink::ModbusPlugin plugin(&deviceManager, config);
     bool started = plugin.initialize() && plugin.start();
-    plugin.stop();
 
-    server.join();
-    close(serverSocket);
+    while (!firstSessionFinished)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 
     const edgelink::Device* device =
         deviceManager.findDevice("process-device-01");
     const edgelink::Tag* missingTag =
         device != nullptr ? device->findTag("missing") : nullptr;
+    const bool initialTagValuesPassed =
+        hasGoodDoubleTag(device, "temperature", 25.3) &&
+        hasGoodDoubleTag(device, "signed-adjusted", -8.0) &&
+        hasGoodDoubleTag(device, "energy", 1000.0) &&
+        hasGoodDoubleTag(device, "flow", 26.0) &&
+        missingTag != nullptr &&
+        missingTag->quality == edgelink::Quality::Timeout;
+
+    // 模拟设备断开后再次采集，超过限制后设备应进入Timeout。
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    const bool timeoutPollFailed = !plugin.pollOnce();
+    const bool enteredTimeout =
+        device != nullptr &&
+        device->state == edgelink::ConnectionState::Timeout;
+    const edgelink::Tag* timedOutTemperature =
+        device != nullptr ? device->findTag("temperature") : nullptr;
+    const bool timeoutQualityUpdated =
+        timedOutTemperature != nullptr &&
+        timedOutTemperature->quality == edgelink::Quality::Timeout;
+
+    // 退避时间未到时不应立即发起新连接。
+    const bool immediateRetrySuppressed =
+        !plugin.pollOnce() && repliedRequests == requestsPerSession;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(55));
+    // missing Tag仍会返回失败，但其他Tag应在重连后恢复。
+    const bool reconnectPollHadExpectedTagError = !plugin.pollOnce();
+    const bool reconnected =
+        device != nullptr &&
+        device->state == edgelink::ConnectionState::Connected &&
+        hasGoodDoubleTag(device, "temperature", 25.3) &&
+        hasGoodDoubleTag(device, "signed-adjusted", -8.0) &&
+        hasGoodDoubleTag(device, "energy", 1000.0) &&
+        hasGoodDoubleTag(device, "flow", 26.0);
+
+    server.join();
+    close(serverSocket);
+    plugin.stop();
 
     // 重复Tag名会导致后一个值覆盖前一个，所以必须在初始化阶段拒绝。
     edgelink::ModbusTcpConfig invalidConfig;
@@ -187,12 +240,13 @@ int main()
     bool passed = started &&
                   repliedRequests == expectedRequests &&
                   device != nullptr &&
-                  hasGoodDoubleTag(device, "temperature", 25.3) &&
-                  hasGoodDoubleTag(device, "signed-adjusted", -8.0) &&
-                  hasGoodDoubleTag(device, "energy", 1000.0) &&
-                  hasGoodDoubleTag(device, "flow", 26.0) &&
-                  missingTag != nullptr &&
-                  missingTag->quality == edgelink::Quality::Timeout &&
+                  initialTagValuesPassed &&
+                  timeoutPollFailed &&
+                  enteredTimeout &&
+                  timeoutQualityUpdated &&
+                  immediateRetrySuppressed &&
+                  reconnectPollHadExpectedTagError &&
+                  reconnected &&
                   !invalidPlugin.initialize();
 
     modbus_mapping_free(mapping);

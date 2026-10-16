@@ -1,9 +1,12 @@
 #include "modbus_plugin.h"
 
+#include "edgelink/device_connection_state_machine.h"
 #include "edgelink/logger.h"
+#include "edgelink/reconnect_backoff.h"
 
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -46,6 +49,9 @@ bool validateConfig(const edgelink::ModbusTcpConfig& config)
     if (config.host.empty() ||
         config.port <= 0 || config.port > 65535 ||
         config.slaveId <= 0 || config.slaveId > 247 ||
+        config.communicationTimeoutMs <= 0 ||
+        config.reconnectInitialDelayMs <= 0 ||
+        config.reconnectMaximumDelayMs < config.reconnectInitialDelayMs ||
         config.deviceId.empty() || config.tags.empty())
     {
         return false;
@@ -223,6 +229,14 @@ bool ModbusPlugin::initialize()
         }
     }
 
+    stateMachine_ = std::make_unique<DeviceConnectionStateMachine>(
+        deviceManager_,
+        config_.deviceId,
+        std::chrono::milliseconds(config_.communicationTimeoutMs));
+    reconnectBackoff_ = std::make_unique<ReconnectBackoff>(
+        std::chrono::milliseconds(config_.reconnectInitialDelayMs),
+        std::chrono::milliseconds(config_.reconnectMaximumDelayMs));
+
     Logger::info("ModbusPlugin initialized");
     return true;
 }
@@ -242,27 +256,15 @@ bool ModbusPlugin::start()
         return false;
     }
 
-    deviceManager_->updateConnectionState(
-        config_.deviceId,
-        ConnectionState::Connecting);
-
-    if (modbus_connect(context_) < 0)
+    if (!reconnectBackoff_->canRetry())
     {
-        Logger::error(
-            "Failed to connect Modbus TCP device: " +
-            std::string(modbus_strerror(errno)));
-
-        deviceManager_->updateConnectionState(
-            config_.deviceId,
-            ConnectionState::Error);
         return false;
     }
 
-    connected_ = true;
-
-    deviceManager_->updateConnectionState(
-        config_.deviceId,
-        ConnectionState::Connected);
+    if (!connectTransport())
+    {
+        return false;
+    }
 
     // 单个Tag采集失败不代表TCP连接失败，保留连接便于下次重试。
     if (!pollOnce())
@@ -285,11 +287,18 @@ void ModbusPlugin::stop()
         connected_ = false;
     }
 
-    if (deviceManager_->hasDevice(config_.deviceId))
+    if (stateMachine_ != nullptr &&
+        stateMachine_->state() != ConnectionState::Disconnected)
     {
-        deviceManager_->updateConnectionState(
+        stateMachine_->transitionTo(ConnectionState::Disconnected);
+        deviceManager_->updateAllTagQualities(
             config_.deviceId,
-            ConnectionState::Disconnected);
+            Quality::Disconnected);
+    }
+
+    if (reconnectBackoff_ != nullptr)
+    {
+        reconnectBackoff_->reset();
     }
 }
 
@@ -300,11 +309,19 @@ bool ModbusPlugin::pollOnce()
 {
     if (!connected_)
     {
-        Logger::error("Modbus TCP device is not connected");
-        return false;
+        if (reconnectBackoff_ == nullptr || !reconnectBackoff_->canRetry())
+        {
+            return false;
+        }
+
+        if (!connectTransport())
+        {
+            return false;
+        }
     }
 
     bool allSucceeded = true;
+    bool receivedResponse = false;
 
     for (const ModbusTagConfig& tagConfig : config_.tags)
     {
@@ -331,6 +348,8 @@ bool ModbusPlugin::pollOnce()
             continue;
         }
 
+        receivedResponse = true;
+
         const std::optional<double> value = decodeValue(registers, tagConfig);
 
         if (!value.has_value())
@@ -351,7 +370,67 @@ bool ModbusPlugin::pollOnce()
         }
     }
 
+    if (receivedResponse)
+    {
+        stateMachine_->markActivity();
+    }
+    else
+    {
+        if (stateMachine_->checkTimeout())
+        {
+            deviceManager_->updateAllTagQualities(
+                config_.deviceId,
+                Quality::Timeout);
+            modbus_close(context_);
+            connected_ = false;
+            reconnectBackoff_->recordFailure();
+        }
+    }
+
     return allSucceeded;
+}
+
+/**
+ * @brief 连接Modbus TCP传输，失败时进入Error并安排下次退避重试。
+ */
+bool ModbusPlugin::connectTransport()
+{
+    if (connected_)
+    {
+        return true;
+    }
+
+    if (!stateMachine_->transitionTo(ConnectionState::Connecting))
+    {
+        return false;
+    }
+
+    if (modbus_connect(context_) < 0)
+    {
+        Logger::error(
+            "Failed to connect Modbus TCP device: " +
+            std::string(modbus_strerror(errno)));
+        stateMachine_->transitionTo(ConnectionState::Error);
+        deviceManager_->updateAllTagQualities(
+            config_.deviceId,
+            Quality::Disconnected);
+        reconnectBackoff_->recordFailure();
+        return false;
+    }
+
+    connected_ = true;
+
+    if (!stateMachine_->transitionTo(ConnectionState::Connected))
+    {
+        modbus_close(context_);
+        connected_ = false;
+        reconnectBackoff_->recordFailure();
+        return false;
+    }
+
+    reconnectBackoff_->reset();
+    Logger::info("Modbus TCP transport connected");
+    return true;
 }
 
 /**

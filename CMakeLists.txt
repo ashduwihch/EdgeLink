@@ -3,7 +3,7 @@
 # 最低CMake版本要求
 cmake_minimum_required(VERSION 3.16)
 # 定义工程：项目名 版本号 CXX即使用C++
-project(EdgeLink VERSION 0.4.0 LANGUAGES CXX)
+project(EdgeLink VERSION 0.5.0 LANGUAGES CXX)
 # 项目统一使用C++17
 set(CMAKE_CXX_STANDARD 17)
 # 必须使用指定的C++17
@@ -29,6 +29,8 @@ add_library(edgelink
     src/tcp_server.cpp
     src/plugin_manager.cpp
     src/device_manager.cpp
+    src/device_connection_state_machine.cpp
+    src/reconnect_backoff.cpp
     src/device_scheduler.cpp
     src/message_bus.cpp
     src/unix_domain_server.cpp
@@ -110,6 +112,23 @@ target_link_libraries(modbus_plugin
     PUBLIC
     edgelink
     PkgConfig::LIBMODBUS
+)
+
+# 创建SocketCAN动态插件
+add_library(socketcan_plugin SHARED
+    plugins/socketcan_plugin/socketcan_plugin.cpp
+    plugins/socketcan_plugin/socketcan_transport.cpp
+)
+
+target_include_directories(socketcan_plugin
+    PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/plugins/socketcan_plugin
+)
+
+target_link_libraries(socketcan_plugin
+    PUBLIC
+    edgelink
 )
 
 # 开启CMake测试功能
@@ -207,6 +226,36 @@ target_link_libraries(test_device_manager
     edgelink
 )
 
+# 创建设备连接状态机和超时测试程序
+add_executable(test_device_connection_state_machine
+    tests/test_device_connection_state_machine.cpp
+)
+
+target_link_libraries(test_device_connection_state_machine
+    PRIVATE
+    edgelink
+)
+
+# 创建设备重连指数退避测试程序
+add_executable(test_reconnect_backoff
+    tests/test_reconnect_backoff.cpp
+)
+
+target_link_libraries(test_reconnect_backoff
+    PRIVATE
+    edgelink
+)
+
+# 创建20设备并发轮询与单设备故障隔离测试
+add_executable(test_twenty_device_integration
+    tests/test_twenty_device_integration.cpp
+)
+
+target_link_libraries(test_twenty_device_integration
+    PRIVATE
+    edgelink
+)
+
 # 创建设备多周期轮询调度器测试程序
 add_executable(test_device_scheduler
     tests/test_device_scheduler.cpp
@@ -249,6 +298,28 @@ target_link_libraries(test_modbus_rtu_transport
     modbus_plugin
     util
 )
+
+# 验证vcan接口上的SocketCAN帧收发
+add_executable(test_socketcan_transport
+    tests/test_socketcan_transport.cpp
+)
+
+target_link_libraries(test_socketcan_transport
+    PRIVATE
+    socketcan_plugin
+)
+
+# 验证PluginManager可动态加载SocketCAN插件
+add_executable(test_socketcan_plugin_load
+    tests/test_socketcan_plugin_load.cpp
+)
+
+target_link_libraries(test_socketcan_plugin_load
+    PRIVATE
+    edgelink
+)
+
+add_dependencies(test_socketcan_plugin_load socketcan_plugin)
 
 # 创建进程内MessageBus测试程序
 add_executable(test_message_bus
@@ -328,10 +399,16 @@ add_test(NAME PluginTest COMMAND test_plugin)
 add_test(NAME PluginManagerTest COMMAND test_plugin_manager $<TARGET_FILE:mock_plugin>)
 add_test(NAME DeviceModelTest COMMAND test_device_model)
 add_test(NAME DeviceManagerTest COMMAND test_device_manager)
+add_test(NAME DeviceConnectionStateMachineTest COMMAND test_device_connection_state_machine)
+add_test(NAME ReconnectBackoffTest COMMAND test_reconnect_backoff)
+add_test(NAME TwentyDeviceIntegrationTest COMMAND test_twenty_device_integration)
 add_test(NAME DeviceSchedulerTest COMMAND test_device_scheduler)
 add_test(NAME ModbusPluginTest COMMAND test_modbus_plugin)
 add_test(NAME ModbusPluginLoadTest COMMAND test_modbus_plugin_load $<TARGET_FILE:modbus_plugin>)
 add_test(NAME ModbusRtuTransportTest COMMAND test_modbus_rtu_transport)
+add_test(NAME SocketCanTransportTest COMMAND test_socketcan_transport)
+set_tests_properties(SocketCanTransportTest PROPERTIES SKIP_RETURN_CODE 77)
+add_test(NAME SocketCanPluginLoadTest COMMAND test_socketcan_plugin_load $<TARGET_FILE:socketcan_plugin>)
 add_test(NAME MessageBusTest COMMAND test_message_bus)
 add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)

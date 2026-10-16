@@ -26,6 +26,7 @@ enum class ConnectionState
     Disconnected,
     Connecting,
     Connected,
+    Timeout,
     Error
 };
 
@@ -131,6 +132,9 @@ inline const char* connectionStateToString(ConnectionState state)
 
         case ConnectionState::Connected:
             return "CONNECTED";
+
+        case ConnectionState::Timeout:
+            return "TIMEOUT";
 
         case ConnectionState::Error:
             return "ERROR";
