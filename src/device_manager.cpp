@@ -163,6 +163,38 @@ namespace edgelink
     }
 
 
+    /**
+     * @brief 遍历设备中的Tag，统一更新质量和时间戳。
+     */
+    bool DeviceManager::updateAllTagQualities(
+        const std::string& deviceId,
+        Quality quality)
+    {
+        Device* device = findDevice(deviceId);
+
+        if (device == nullptr)
+        {
+            Logger::error("Device not found: " + deviceId);
+            return false;
+        }
+
+        const auto timestamp = std::chrono::system_clock::now();
+
+        for (auto& tag : device->tags)
+        {
+            tag.second.quality = quality;
+            tag.second.timestamp = timestamp;
+        }
+
+        Logger::info(
+            "All Tag qualities updated: " +
+            deviceId +
+            " -> " +
+            qualityToString(quality));
+        return true;
+    }
+
+
     // 删除所有设备
     void DeviceManager::clear()
     {

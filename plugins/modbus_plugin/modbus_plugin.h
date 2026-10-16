@@ -5,11 +5,15 @@
 
 #include <modbus.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace edgelink
 {
+
+class DeviceConnectionStateMachine;
+class ReconnectBackoff;
 
 // Modbus寄存器数据的解析类型
 enum class ModbusDataType
@@ -37,6 +41,9 @@ struct ModbusTcpConfig
     std::string host = "127.0.0.1";
     int port = 1502;
     int slaveId = 1;
+    int communicationTimeoutMs = 3000;
+    int reconnectInitialDelayMs = 500;
+    int reconnectMaximumDelayMs = 30000;
 
     std::string deviceId = "modbus-device-01";
     std::string deviceName = "Modbus TCP Device";
@@ -96,9 +103,17 @@ public:
     const DeviceManager& deviceManager() const;
 
 private:
+    /**
+     * @brief 尝试建立Modbus TCP连接并同步状态机和退避计数。
+     * @return 连接建立成功返回true。
+     */
+    bool connectTransport();
+
     ModbusTcpConfig config_;
     DeviceManager ownedDeviceManager_;
     DeviceManager* deviceManager_;
+    std::unique_ptr<DeviceConnectionStateMachine> stateMachine_;
+    std::unique_ptr<ReconnectBackoff> reconnectBackoff_;
 
     modbus_t* context_ = nullptr;
     bool connected_ = false;

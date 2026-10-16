@@ -40,6 +40,16 @@ namespace edgelink
         // 添加或更新设备中的Tag
         bool updateTag(const std::string& deviceId, Tag tag);
 
+        /**
+         * @brief 批量更新指定设备中所有Tag的数据质量。
+         * @param deviceId 目标设备ID。
+         * @param quality 应用到所有Tag的质量状态。
+         * @return 设备存在返回true。
+         */
+        bool updateAllTagQualities(
+            const std::string& deviceId,
+            Quality quality);
+
         // 删除所有设备
         void clear();
 

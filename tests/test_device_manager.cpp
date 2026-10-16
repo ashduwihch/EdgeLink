@@ -65,11 +65,33 @@ int main()
     }
 
     const edgelink::DeviceManager& constManager = manager;
+    const bool timeoutQualityUpdated =
+        manager.updateAllTagQualities(
+            "motor-01",
+            edgelink::Quality::Timeout);
+    const edgelink::Device* timeoutDevice =
+        constManager.findDevice("motor-01");
+    const edgelink::Tag* timeoutSpeed =
+        timeoutDevice != nullptr ? timeoutDevice->findTag("speed") : nullptr;
+    const bool timeoutQualityObserved =
+        timeoutSpeed != nullptr &&
+        timeoutSpeed->quality == edgelink::Quality::Timeout &&
+        !timeoutSpeed->isValid();
+    const bool goodQualityRestored =
+        manager.updateAllTagQualities("motor-01", edgelink::Quality::Good);
     const edgelink::Device* storedMotor = constManager.findDevice("motor-01");
     const edgelink::Tag* storedSpeed = storedMotor != nullptr ? storedMotor->findTag("speed") : nullptr;
     const std::vector<std::string> ids = manager.deviceIds();
 
     if (!check(storedMotor != nullptr, "Stored device was not found") ||
+        !check(timeoutQualityUpdated, "Failed to mark all Tags as Timeout") ||
+        !check(timeoutQualityObserved, "Timeout quality was not stored") ||
+        !check(goodQualityRestored, "Failed to restore all Tag qualities") ||
+        !check(
+            !manager.updateAllTagQualities(
+                "missing",
+                edgelink::Quality::Disconnected),
+            "Missing device quality update succeeded") ||
         !check(storedMotor->isOnline(), "Stored device should be online") ||
         !check(storedSpeed != nullptr, "Stored tag was not found") ||
         !check(storedSpeed->isValid(), "Stored tag should be valid") ||
