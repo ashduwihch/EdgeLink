@@ -1,0 +1,36 @@
+[Unit]
+Description=EdgeLink Industrial Edge Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/edgelinkd
+Restart=on-failure
+RestartSec=2s
+WatchdogSec=10s
+NotifyAccess=main
+TimeoutStopSec=5s
+KillSignal=SIGTERM
+
+# systemd自动创建运行时、数据和日志目录，并使用临时服务账号
+DynamicUser=yes
+RuntimeDirectory=edgelink
+StateDirectory=edgelink
+WorkingDirectory=/var/lib/edgelink
+Environment=EDGELINK_CONFIG=/etc/edgelink/edgelink.yaml
+Environment=EDGELINK_STORAGE_PATH=/var/lib/edgelink/edgelink.db
+Environment=EDGELINK_CONTROL_SOCKET=/run/edgelink/control.sock
+
+# Logger输出到stderr，由systemd追加到文件，再交给logrotate轮转
+StandardOutput=append:/var/log/edgelink.log
+StandardError=append:/var/log/edgelink.log
+
+# 基础安全隔离
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
