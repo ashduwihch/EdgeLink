@@ -444,12 +444,25 @@ EdgeLink 不重复实现成熟的标准协议栈，而将主要精力放在系�
 | Function | Library |
 |---|---|
 | Modbus | libmodbus |
-| MQTT | Eclipse Paho |
+| MQTT | libmosquitto |
 | Database | SQLite3 |
 | JSON | nlohmann/json |
 | YAML | yaml-cpp |
 | Unit Test | GoogleTest |
 | Edge AI | RKNN Runtime / Toolkit |
+
+当前 Ubuntu 构建依赖可通过以下命令安装：
+
+```bash
+sudo apt-get install -y build-essential cmake pkg-config \
+    libyaml-cpp-dev libmodbus-dev libmosquitto-dev libsqlite3-dev
+```
+
+如需在本机进行 MQTT 联调，可额外安装 Mosquitto Broker：
+
+```bash
+sudo apt-get install -y mosquitto mosquitto-clients
+```
 
 ---
 
@@ -509,6 +522,40 @@ EdgeLink/
 ├── LICENSE
 └── README.md
 ```
+
+---
+
+## systemd Deployment
+
+构建完成后，可将程序、systemd 单元和日志轮转规则安装到系统：
+
+```bash
+sudo install -m 0755 build/edgelinkd /usr/local/bin/edgelinkd
+sudo install -d -m 0755 /etc/edgelink
+sudo install -m 0644 config/edgelink.yaml /etc/edgelink/edgelink.yaml
+sudo install -m 0644 deploy/edgelink.service /etc/systemd/system/edgelink.service
+sudo install -m 0644 deploy/edgelink.logrotate /etc/logrotate.d/edgelink
+sudo systemctl daemon-reload
+sudo systemctl enable --now edgelink
+```
+
+查看服务状态和文件日志：
+
+```bash
+systemctl status edgelink
+tail -f /var/log/edgelink.log
+```
+
+`edgelink.service` 使用 `Type=notify`。程序完成初始化后发送 `READY=1`，
+主事件循环每隔 `WatchdogSec / 2` 发送一次 `WATCHDOG=1`。如果事件循环卡死，
+systemd 将判定 watchdog 超时并按 `Restart=on-failure` 重启服务。
+
+部署模式下，SQLite 数据库存放在 `/var/lib/edgelink/edgelink.db`，
+本地控制套接字存放在 `/run/edgelink/control.sock`。这两个目录都由 systemd 创建，
+避免 `/tmp` 隔离或工作目录变化导致数据和控制接口不可用。
+
+日志由 systemd 追加到 `/var/log/edgelink.log`，
+`edgelink.logrotate` 每日检查、最多保留 7 份，并在文件超过 10 MiB 时提前轮转。
 
 ---
 
@@ -596,12 +643,12 @@ kill -9 edgelinkd
 - [x] SocketCAN
 - [x] Device Scheduler
 - [x] Connection State Machine
-- [ ] MQTT Service
-- [ ] SQLite persistence
-- [ ] Store-and-Forward
-- [ ] systemd & watchdog
+- [x] MQTT Service
+- [x] SQLite persistence
+- [x] Store-and-Forward
+- [x] systemd & watchdog
 - [ ] System Monitor
-- [ ] Fault Injection
+- [x] Fault Injection
 - [ ] Benchmark
 - [ ] V4L2 Camera Service
 - [ ] RKNN Edge AI Service
@@ -614,7 +661,7 @@ EdgeLink is currently under active development.
 
 Current version:
 
-**v0.5.0 — Industrial Device Connectivity**
+**v0.6.0 — Reliable Data Pipeline**
 
 Completed:
 
@@ -644,10 +691,15 @@ Completed:
 - [x] Device connection state machine and communication timeout
 - [x] Exponential-backoff reconnect and Tag Quality updates
 - [x] 20-device polling and fault-isolation integration test
+- [x] MQTT publishing and exponential-backoff reconnect
+- [x] SQLite WAL persistence and restart recovery
+- [x] Offline Store-and-Forward with ordered QoS 1 replay
+- [x] systemd READY / watchdog / automatic restart integration
+- [x] logrotate policy and reliability fault report
 
 Next milestone:
 
-**v0.6.0 — Reliable Data Pipeline**
+**v0.7.0 — System Reliability**
 
 ---
 

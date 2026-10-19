@@ -3,7 +3,7 @@
 # 最低CMake版本要求
 cmake_minimum_required(VERSION 3.16)
 # 定义工程：项目名 版本号 CXX即使用C++
-project(EdgeLink VERSION 0.5.0 LANGUAGES CXX)
+project(EdgeLink VERSION 0.6.0 LANGUAGES CXX)
 # 项目统一使用C++17
 set(CMAKE_CXX_STANDARD 17)
 # 必须使用指定的C++17
@@ -15,6 +15,8 @@ find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBMODBUS REQUIRED IMPORTED_TARGET libmodbus)
+pkg_check_modules(LIBMOSQUITTO REQUIRED IMPORTED_TARGET libmosquitto)
+pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 # 创建EdgeLink核心库：放项目中的公共功能模块
 add_library(edgelink
@@ -39,6 +41,9 @@ add_library(edgelink
     src/eventfd_notifier.cpp
     src/ipc_message_codec.cpp
     src/shared_memory_message_bridge.cpp
+    src/mqtt_service.cpp
+    src/storage_service.cpp
+    src/systemd_notifier.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -57,6 +62,8 @@ target_link_libraries(edgelink
     Threads::Threads
     ${CMAKE_DL_LIBS}   #链接linux动态加载库
     rt                  #POSIX Shared Memory接口
+    PkgConfig::LIBMOSQUITTO
+    PkgConfig::SQLITE3
 )
 
 # 创建一个叫edgelinkd的可执行程序
@@ -341,6 +348,56 @@ target_link_libraries(test_message_bus_concurrent
     edgelink
 )
 
+# 创建MQTT北向通信与MessageBus转发测试程序
+add_executable(test_mqtt_service
+    tests/test_mqtt_service.cpp
+)
+
+target_link_libraries(test_mqtt_service
+    PRIVATE
+    edgelink
+)
+
+# 创建SQLite WAL持久化与重启恢复测试程序
+add_executable(test_storage_service
+    tests/test_storage_service.cpp
+)
+
+target_link_libraries(test_storage_service
+    PRIVATE
+    edgelink
+)
+
+# 创建MQTT断网缓存与SQLite待发送队列测试程序
+add_executable(test_mqtt_offline_buffer
+    tests/test_mqtt_offline_buffer.cpp
+)
+
+target_link_libraries(test_mqtt_offline_buffer
+    PRIVATE
+    edgelink
+)
+
+# 创建MQTT恢复连接后的QoS 1有序补传测试程序
+add_executable(test_mqtt_data_replay
+    tests/test_mqtt_data_replay.cpp
+)
+
+target_link_libraries(test_mqtt_data_replay
+    PRIVATE
+    edgelink
+)
+
+# 创建systemd READY/watchdog/STOPPING通知测试程序
+add_executable(test_systemd_notifier
+    tests/test_systemd_notifier.cpp
+)
+
+target_link_libraries(test_systemd_notifier
+    PRIVATE
+    edgelink
+)
+
 # 创建Unix Domain Socket本地进程通信测试程序
 add_executable(test_unix_domain_server
     tests/test_unix_domain_server.cpp
@@ -411,6 +468,11 @@ set_tests_properties(SocketCanTransportTest PROPERTIES SKIP_RETURN_CODE 77)
 add_test(NAME SocketCanPluginLoadTest COMMAND test_socketcan_plugin_load $<TARGET_FILE:socketcan_plugin>)
 add_test(NAME MessageBusTest COMMAND test_message_bus)
 add_test(NAME MessageBusConcurrentTest COMMAND test_message_bus_concurrent)
+add_test(NAME MqttServiceTest COMMAND test_mqtt_service)
+add_test(NAME StorageServiceTest COMMAND test_storage_service)
+add_test(NAME MqttOfflineBufferTest COMMAND test_mqtt_offline_buffer)
+add_test(NAME MqttDataReplayTest COMMAND test_mqtt_data_replay)
+add_test(NAME SystemdNotifierTest COMMAND test_systemd_notifier)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
 add_test(NAME ControlCommandProcessorTest COMMAND test_control_command_processor)
 add_test(NAME SharedMemoryBufferTest COMMAND test_shared_memory_buffer)

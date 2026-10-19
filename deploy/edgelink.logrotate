@@ -1,0 +1,10 @@
+/var/log/edgelink.log {
+    daily
+    rotate 7
+    maxsize 10M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

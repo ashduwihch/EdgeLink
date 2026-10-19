@@ -7,3 +7,19 @@ logging:
 
 runtime:
   shutdown_timeout_ms: 3000
+
+# MQTT北向数据发布配置
+mqtt:
+  host: 127.0.0.1
+  port: 1883
+  client_id: edgelink
+  keep_alive_seconds: 60
+  connect_timeout_ms: 3000
+  reconnect_initial_delay_seconds: 1
+  reconnect_maximum_delay_seconds: 30
+  publish_ack_timeout_ms: 3000
+  topic_prefix: edgelink/devices
+
+# SQLite本地持久化配置
+storage:
+  database_path: ./data/edgelink.db
