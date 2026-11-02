@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 尽量使用标准C++17，不依赖GCC私有语法扩展
 set(CMAKE_CXX_EXTENSIONS OFF)
+# 故障演示程序默认不参与生产构建，需要调试流程时显式开启
+option(EDGELINK_BUILD_DEBUG_TOOLS "Build crash debugging demonstration tools" OFF)
 # 查找第三方库，REQUIRED表示找不到就直接让CMake配置失败
 find_package(yaml-cpp REQUIRED)
 find_package(Threads REQUIRED)
@@ -44,6 +46,7 @@ add_library(edgelink
     src/mqtt_service.cpp
     src/storage_service.cpp
     src/systemd_notifier.cpp
+    src/system_monitor.cpp
 )
 
 # 动态插件会链接edgelink静态库，因此核心库需要使用位置无关代码
@@ -76,6 +79,22 @@ target_link_libraries(edgelinkd
     PRIVATE
     edgelink
 )
+
+if(EDGELINK_BUILD_DEBUG_TOOLS)
+    # 与生产代码隔离的故障注入程序，仅用于GDB/Core Dump/strace实验
+    add_executable(edgelink_crash_demo
+        tools/crash_demo.cpp
+    )
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(edgelink_crash_demo
+            PRIVATE
+            -O0
+            -g3
+            -fno-omit-frame-pointer
+        )
+    endif()
+endif()
 
 # 创建Messaging与IPC性能测试程序（不注册到CTest，避免把性能波动当成功能失败）
 add_executable(benchmark_messaging_ipc
@@ -398,6 +417,16 @@ target_link_libraries(test_systemd_notifier
     edgelink
 )
 
+# 创建/proc与/sys系统资源监控测试程序
+add_executable(test_system_monitor
+    tests/test_system_monitor.cpp
+)
+
+target_link_libraries(test_system_monitor
+    PRIVATE
+    edgelink
+)
+
 # 创建Unix Domain Socket本地进程通信测试程序
 add_executable(test_unix_domain_server
     tests/test_unix_domain_server.cpp
@@ -473,6 +502,7 @@ add_test(NAME StorageServiceTest COMMAND test_storage_service)
 add_test(NAME MqttOfflineBufferTest COMMAND test_mqtt_offline_buffer)
 add_test(NAME MqttDataReplayTest COMMAND test_mqtt_data_replay)
 add_test(NAME SystemdNotifierTest COMMAND test_systemd_notifier)
+add_test(NAME SystemMonitorTest COMMAND test_system_monitor)
 add_test(NAME UnixDomainServerTest COMMAND test_unix_domain_server)
 add_test(NAME ControlCommandProcessorTest COMMAND test_control_command_processor)
 add_test(NAME SharedMemoryBufferTest COMMAND test_shared_memory_buffer)

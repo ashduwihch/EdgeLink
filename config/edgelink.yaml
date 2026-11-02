@@ -23,3 +23,8 @@ mqtt:
 # SQLite本地持久化配置
 storage:
   database_path: ./data/edgelink.db
+
+# Linux系统资源周期采样配置
+monitor:
+  enabled: true
+  interval_ms: 5000
