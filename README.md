@@ -285,25 +285,45 @@ CONNECTED
 
 ### System Monitoring
 
-EdgeLink 将直接读取 Linux 系统接口：
+EdgeLink 的 `SystemMonitor` 直接读取 Linux 系统接口：
 
 ```text
 /proc
 /sys
 ```
 
-监控：
+当前已实现：
 
 - CPU Usage
 - Memory Usage
+- CPU Temperature
+
+CPU 使用率通过两次 `/proc/stat` 累计计数的差值计算。内存来自
+`/proc/meminfo`，温度来自 `/sys/class/thermal/thermal_zone*`。
+采样周期由 `monitor.interval_ms` 配置，并通过 EventLoop 中的 `timerfd`
+持续执行。后续还会扩展：
+
 - Load Average
 - System Uptime
-- CPU Temperature
 - Network Statistics
 - Process Status
 - Device Status
 
 系统运行信息将用于日志、故障定位和性能测试。
+
+GDB、Core Dump 与 strace 的可重复故障定位流程见
+[`docs/crash-debugging.md`](docs/crash-debugging.md)。
+
+最小 Linux 内核模块的虚拟机实验见
+[`docs/kernel-module-lab.md`](docs/kernel-module-lab.md)。RK3568 板端加载与卸载
+需要在开发板可用后另行验证。
+
+Platform Driver 匹配与 `/dev` 节点的虚拟机实验见
+[`docs/platform-driver-lab.md`](docs/platform-driver-lab.md)。该实验使用假设备，
+不等于已完成 RK3568 设备树与硬件验证。
+
+本阶段的构建、测试结果和待补项目见
+[`docs/week7-regression.md`](docs/week7-regression.md)。
 
 ---
 
@@ -647,7 +667,7 @@ kill -9 edgelinkd
 - [x] SQLite persistence
 - [x] Store-and-Forward
 - [x] systemd & watchdog
-- [ ] System Monitor
+- [x] System Monitor
 - [x] Fault Injection
 - [ ] Benchmark
 - [ ] V4L2 Camera Service
@@ -696,6 +716,8 @@ Completed:
 - [x] Offline Store-and-Forward with ordered QoS 1 replay
 - [x] systemd READY / watchdog / automatic restart integration
 - [x] logrotate policy and reliability fault report
+- [x] `/proc` and `/sys` CPU, RAM, and thermal monitoring
+- [x] GDB, Core Dump, and strace crash-debugging workflow
 
 Next milestone:
 

@@ -6,6 +6,7 @@
 #include "edgelink/mqtt_service.h"
 #include "edgelink/signal_handler.h"
 #include "edgelink/storage_service.h"
+#include "edgelink/system_monitor.h"
 #include "edgelink/systemd_notifier.h"
 #include "edgelink/tcp_server.h"
 #include "edgelink/timer.h"
@@ -15,7 +16,9 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -65,15 +68,18 @@ int main()
         config.getInt("mqtt.reconnect_initial_delay_seconds", 1);
     int mqttReconnectMaximum =
         config.getInt("mqtt.reconnect_maximum_delay_seconds", 30);
+    bool monitorEnabled = config.getBool("monitor.enabled", true);
+    int monitorIntervalMs = config.getInt("monitor.interval_ms", 5000);
 
     if (mqttPort <= 0 ||
         mqttPort > std::numeric_limits<std::uint16_t>::max() ||
         mqttKeepAlive <= 0 ||
         mqttKeepAlive > std::numeric_limits<std::uint16_t>::max() ||
         mqttReconnectInitial <= 0 ||
-        mqttReconnectMaximum < mqttReconnectInitial)
+        mqttReconnectMaximum < mqttReconnectInitial ||
+        (monitorEnabled && monitorIntervalMs <= 0))
     {
-        edgelink::Logger::error("MQTT port or keep-alive is invalid");
+        edgelink::Logger::error("MQTT or system monitor configuration is invalid");
         return 1;
     }
 
@@ -102,6 +108,7 @@ int main()
     edgelink::TcpServer server(&eventLoop, 9000);
     edgelink::UnixDomainServer controlServer(&eventLoop, controlSocketPath);
     edgelink::ControlCommandProcessor commandProcessor;
+    edgelink::SystemMonitor systemMonitor;
     edgelink::SystemdNotifier systemdNotifier;
 
     if (!storageService.open() ||
@@ -170,6 +177,64 @@ int main()
             [&systemdNotifier]()
             {
                 systemdNotifier.notifyWatchdog();
+            });
+    }
+
+    // 先读取一次CPU累计计数作为基线，之后由timerfd周期计算两次采样差值。
+    edgelink::Timer monitorTimer(&eventLoop);
+
+    if (monitorEnabled)
+    {
+        edgelink::SystemMetrics initialMetrics;
+
+        if (!systemMonitor.sample(initialMetrics))
+        {
+            edgelink::Logger::warn(
+                "Failed to establish initial system monitor sample");
+        }
+
+        monitorTimer.startPeriodic(
+            static_cast<std::uint64_t>(monitorIntervalMs),
+            [&systemMonitor]()
+            {
+                edgelink::SystemMetrics metrics;
+
+                if (!systemMonitor.sample(metrics))
+                {
+                    edgelink::Logger::warn(
+                        "Failed to collect Linux system metrics");
+                    return;
+                }
+
+                constexpr double BytesPerMebibyte = 1024.0 * 1024.0;
+                std::ostringstream summary;
+                summary << std::fixed << std::setprecision(1)
+                        << "System metrics: CPU=";
+
+                if (metrics.cpuUsageAvailable)
+                {
+                    summary << metrics.cpuUsagePercent << "%";
+                }
+                else
+                {
+                    summary << "warming-up";
+                }
+
+                summary << ", RAM="
+                        << metrics.memoryUsedBytes / BytesPerMebibyte
+                        << "/"
+                        << metrics.memoryTotalBytes / BytesPerMebibyte
+                        << " MiB ("
+                        << metrics.memoryUsagePercent << "%)";
+
+                for (const edgelink::ThermalReading& temperature :
+                     metrics.temperatures)
+                {
+                    summary << ", " << temperature.type << "="
+                            << temperature.celsius << " C";
+                }
+
+                edgelink::Logger::info(summary.str());
             });
     }
 

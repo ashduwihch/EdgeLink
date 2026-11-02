@@ -27,8 +27,8 @@ int main()
         return 1;
     }
 
-    // Transport会通过slaveName自行打开从端，测试不需要保留这个原始fd。
-    close(slaveFd);
+    // 保留从端直到通信结束；过早关闭会让主端读取线程偶发遇到EIO。
+    // Transport仍会通过slaveName单独打开从端进行真实读写。
 
     modbus_t* serverContext = modbus_new_rtu(slaveName, 9600, 'N', 8, 1);
     modbus_mapping_t* mapping = modbus_mapping_new(0, 0, 2, 0);
@@ -48,6 +48,7 @@ int main()
         }
 
         close(masterFd);
+        close(slaveFd);
         return 1;
     }
 
@@ -100,6 +101,7 @@ int main()
     modbus_mapping_free(mapping);
     modbus_free(serverContext);
     close(masterFd);
+    close(slaveFd);
 
     if (!passed)
     {
